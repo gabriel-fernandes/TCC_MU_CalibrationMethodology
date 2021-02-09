@@ -159,21 +159,21 @@ class ComtradeWriter:
 
         self.next_sample_number += 1
 
-    def add_sample_record_bin(self, offset, analog_data):
+    #def add_sample_record_bin(self, offset, analog_data):
         # binary comtrade creator prototype (TODO)
 
-        offset_int = (int(offset))
-        self_int = (int(self.next_sample_number))
-        analog_ints = [int(item) for item in analog_data]
+       #offset_int = (int(offset))
+       #self_int = (int(self.next_sample_number))
+        #analog_ints = [int(item) for item in analog_data]
          
-        self.data_file_handler.write(self_int.to_bytes(4, byteorder='little', signed=False)
-                                     + offset_int.to_bytes(4, byteorder='little', signed=False)  
-                                     + analog_ints[0].to_bytes(4, byteorder='little', signed=False)
-                                     + analog_ints[1].to_bytes(4, byteorder='little', signed=False)
-                                     + analog_ints[2].to_bytes(4, byteorder='little', signed=False)
-                                    )
-
-        self.next_sample_number += 1
+       # self.data_file_handler.write(self_int.to_bytes(4, byteorder='little', signed=False)
+        #                             + offset_int.to_bytes(4, byteorder='little', signed=False)  
+         #                            + analog_ints[0].to_bytes(4, byteorder='little', signed=False)
+          #                           + analog_ints[1].to_bytes(4, byteorder='little', signed=False)
+           #                          + analog_ints[2].to_bytes(4, byteorder='little', signed=False)
+            #                        )
+#
+        #self.next_sample_number += 1
 
 
     def __get_formatted_comtrade_ts(self, ts):
