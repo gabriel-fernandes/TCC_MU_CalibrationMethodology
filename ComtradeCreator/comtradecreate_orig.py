@@ -9,11 +9,11 @@ trigger_time = start_time + datetime.timedelta(milliseconds=20)
 
 comtradeWriter = writer.ComtradeWriter("test_orig.cfg", start_time, trigger_time,rec_dev_id=250)
 
-created_id = comtradeWriter.add_digital_channel("RELAY1", 0, 0, 0)
-print("Created new digital channel " + str(created_id))
+#created_id = comtradeWriter.add_digital_channel("RELAY1", 0, 0, 0)
+#print("Created new digital channel " + str(created_id))
 
-created_id = comtradeWriter.add_digital_channel("RELAY2", 0, 0, 0)
-print("Created new digital channel " + str(created_id))
+#created_id = comtradeWriter.add_digital_channel("RELAY2", 0, 0, 0)
+#print("Created new digital channel " + str(created_id))
 
 # A Current
 created_id = comtradeWriter.add_analog_channel("IA", "A", "I", uu="A", skew=0, min=-500, max=500, primary=1,
@@ -36,7 +36,7 @@ with open('./examples/outdata.csv', 'r') as csvfile:
     next(datareader, None)  # skip the header
     for row in datareader:
         comtradeWriter.add_sample_record(row[0],
-                                         [row[1], row[2], row[3]],
-                                         [row[4], row[5]])
+                                         [row[1], row[2], row[3]]
+                                        )
 
 comtradeWriter.finalize()
