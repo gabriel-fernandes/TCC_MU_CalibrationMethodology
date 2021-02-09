@@ -144,7 +144,11 @@ class ComtradeWriter:
         self.y.append(y)
         return self.D
 
-    def add_sample_record(self, offset, analog_data, digital_data):
+# to handle digital_data:
+#    def add_sample_record(self, offset, analog_data, digital_data): and ", ".join(digital_data)
+# TODO: Create specific functions for sample_record of analog and digital data
+
+    def add_sample_record(self, offset, analog_data):
         """adds a record for a particular offset from the start time stamp. The number of analog and digital
         data samples should match the number of analog and digital (respectively) channels already created.
         Failure to do so, will result in exceptions"""
@@ -153,8 +157,6 @@ class ComtradeWriter:
                                      + str(offset)
                                      + ", "
                                      + ", ".join(analog_data)
-                                     + ", "
-                                     + ", ".join(digital_data)
                                      + "\r\n")
 
         self.next_sample_number += 1
