@@ -17,7 +17,7 @@ class ComtradeWriter:
 
 
     def __init__(self, filename, start, trigger, station_name="STN", rec_dev_id="", rev_year="1999",
-                 lf=50, timemult=1.0):
+                 lf=60, timemult=1.0):
 
         self.clear()
 
@@ -224,11 +224,11 @@ class ComtradeWriter:
         self.config_file_handler.write(str(self.lf) + "\r\n")
         
         # Read sampling rates:
-        self.config_file_handler.write(str(self.nrates) + "\r\n")
+        #self.config_file_handler.write(str(self.nrates) + "\r\n")
+        self.config_file_handler.write("1" + "\r\n")
         
-
         if (self.nrates==0):
-            self.config_file_handler.write("0,"+  str(self.next_sample_number -1)+ "\r\n")
+            self.config_file_handler.write("15360,"+  str((self.next_sample_number)) + "\r\n")
         else:
             for i in range(self.nrates):  # @UnusedVariable
                 self.config_file_handler.write(",".join((str(self.samp[i]),
