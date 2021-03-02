@@ -51,42 +51,100 @@ import numpy as np
 # Matplotlib module is needed for this example.
 # pyComtrade needs numpy.
 import pyComtrade
-import numpy
 from matplotlib import pylab
 from pylab import *
+import matplotlib.pyplot as plt
 
 no_acq = 6
 no_ch = 8
 voltageFactor = 100000
 currentFactor = 1000
+currentValues = [50.0, 200.0, 1000.0, 1200.0, 3000.0, 4000.0]
+voltageValues = [9.2, 57.0, 92.0, 115.0, 138.0, 161.0]
 
-def calcRMSChannel(vector):
+def referenceSine(refval, no_samples, f_acq, freq):
+    x = np.arange(no_samples)
+    y = np.sqrt(2)*refval*np.sin(2 * np.pi * freq * x / f_acq)
+
+    print('RMS', np.sqrt(np.mean(y**2)))
+
+    plt.plot(x, y)
+    plt.xlabel('sample(n)')
+    plt.ylabel('voltage(V)')
+    plt.show()
+
+    return y
+
+def calcWorstRMS(vector, reference):
+    error = np.empty(7, dtype=float)
+    tmp = 0.0
+    
+    for idx in range(len(vector)):
+        if vector[idx] > reference :
+            tmp = vector[idx] - reference
+        else:
+            tmp = reference - vector[idx]
+        error[idx] = tmp
+
+    #print('errors', error)
+
+    max_index = np.argmax(error, axis=0) 
+
+    return vector[max_index]
+
+def calcRMSChannel(vector, channel, isCurrent):
     ppc = 256
     tmp = 0.0
     sumRegister = np.empty(no_acq, dtype=float)
-    sumRegister2 = np.empty(49, dtype=float)
+    sumRegister2 = np.empty(8, dtype=float)
     RMSRegister = np.empty(no_acq, dtype=float)
-    RMSRegister2 = np.empty(49, dtype=float)
+    worstRMS_vector = np.empty(no_acq, dtype=float)
+    RMSRegister2 = np.empty(8, dtype=float)
     
     i=0
+    
+    m = int((len(vector[0]) -1)/ppc)
+    n = no_acq
+
+    accum_matrix = [[0 for x in range(m)] for y in range(no_acq)]
+    rms_matrix = [[0 for x in range(m)] for y in range(no_acq)]
+
+
     for kdx in range(no_acq):
         for ydx in range(len(vector[kdx]) - 1):
             sumRegister[kdx] += vector[kdx][ydx]**2
-            #if ((ydx % ppc) == 0):
-            #    sumRegister2[i] = tmp
-            #    tmp = 0.0
-            #    i+=1
-    
-
-   # for zdx in range(i):
-   #     RMSRegister2[zdx] = np.sqrt(sumRegister2[zdx]/(i))
-
-#    print ('RMS Reg2', RMSRegister2)
+            tmp  += vector[kdx][ydx]**2
+            if ((ydx % (ppc-1)) == 0):
+                if(ydx == 0):
+                    continue
+                accum_matrix[kdx][i] = tmp
+                tmp = 0.0
+                i+=1
+        i = 0
+   
 
     for jdx in range(no_acq):
-        RMSRegister[jdx] = np.sqrt(sumRegister[jdx]/(len(vector[jdx]) - 1))
+        for ydx in range(m):
+            rms_matrix[jdx][ydx] = np.sqrt(accum_matrix[jdx][ydx]/(ppc))
+    
 
-    return RMSRegister
+    #RMS per cycle (256 ppc)
+    if (isCurrent):
+        for zdx in range(6):
+             worstRMS_vector[zdx] = calcWorstRMS(rms_matrix[zdx], currentValues[zdx]*currentFactor)
+    else :
+        for zdx in range(6):
+            worstRMS_vector[zdx] = calcWorstRMS(rms_matrix[zdx], voltageValues[zdx]*voltageFactor)
+
+
+    print('worst rms', worstRMS_vector)
+
+   # RMS for all cycles
+   # for jdx in range(no_acq):
+   #     for ydx in range (m):
+   #         RMSRegister[jdx] = np.sqrt(sumRegister[jdx]/(len(vector[jdx]) - 1))
+
+    return worstRMS_vector
 
 
 # Create an instance of the ComtradeRecord class and read the CFG file:
@@ -143,6 +201,15 @@ for idx in range (no_acq):
     # Reading channel 4:
 
 
+#creating ideal sine waves
+currentSines = np.empty(no_acq, dtype=object)
+voltageSines = np.empty(no_acq, dtype=object)
+
+for jdx in range(no_acq):
+    currentSines[jdx] = referenceSine(currentValues[jdx], Nn[jdx], 15360, 60)
+    voltageSines[jdx] = referenceSine(voltageValues[jdx], Nn[jdx], 15360, 60)
+
+
 IAdata  = np.empty(no_acq, dtype=object)
 IBdata  = np.empty(no_acq, dtype=object)
 ICdata  = np.empty(no_acq, dtype=object)
@@ -152,6 +219,7 @@ VBdata  = np.empty(no_acq, dtype=object)
 VCdata  = np.empty(no_acq, dtype=object)
 VNdata  = np.empty(no_acq, dtype=object)
 
+#getting signals from comtrade
 for idx in range(no_acq):
     IAdata[idx] = comtradeObjs[idx]['A'][0]['values']
     IBdata[idx] = comtradeObjs[idx]['A'][1]['values']
@@ -166,31 +234,28 @@ for idx in range(no_acq):
 # Reading time vector:
 time = comtradeObj.get_timestamps()
 
-IAdataRMS = calcRMSChannel(IAdata)/currentFactor
-IBdataRMS = calcRMSChannel(IBdata)/currentFactor
-ICdataRMS = calcRMSChannel(ICdata)/currentFactor
-INdataRMS = calcRMSChannel(INdata)/currentFactor
-VAdataRMS = calcRMSChannel(VAdata)/voltageFactor
-VBdataRMS = calcRMSChannel(VBdata)/voltageFactor
-VCdataRMS = calcRMSChannel(VCdata)/voltageFactor
-VNdataRMS = calcRMSChannel(VNdata)/voltageFactor
+IAdataRMS = calcRMSChannel(IAdata, "IA", True)/currentFactor
+IBdataRMS = calcRMSChannel(IBdata, "IB", True)/currentFactor
+ICdataRMS = calcRMSChannel(ICdata, "IC", True)/currentFactor
+INdataRMS = calcRMSChannel(INdata, "IN", True)/currentFactor
+VAdataRMS = calcRMSChannel(VAdata, "VA", False)/voltageFactor
+VBdataRMS = calcRMSChannel(VBdata, "VB", False)/voltageFactor
+VCdataRMS = calcRMSChannel(VCdata, "VC", False)/voltageFactor
+VNdataRMS = calcRMSChannel(VNdata, "VN", False)/voltageFactor
 
-print('RMS IA 50mA', IAdataRMS[0])
-print('RMS IA 200mA', IAdataRMS[1])
-print('RMS VA 9.2V', VAdataRMS[0])
-print('RMS VA 57V', VAdataRMS[1])
 
-#begin test VA
+#begin algorithm evaluation
 np.random.seed(123)
 
-x = [9.2, 57.0, 92.0, 115.0, 138.0, 161.0];
-y = [VAdataRMS[0], VAdataRMS[1], VAdataRMS[2], VAdataRMS[3], VAdataRMS[4], VAdataRMS[5]]
+x = currentValues;
+y = [IAdataRMS[0], IAdataRMS[1], IAdataRMS[2], IAdataRMS[3], IAdataRMS[4], IAdataRMS[5]]
 
 #noise = 10 * np.random.normal(size=len(x))
 #y = 10 * x + 10 + noise
 
-#mask = np.arange(1, len(x)+1, 1) % 5 == 0
+mask = np.arange(1, len(x)+1, 1) % 5 == 0
 #y[mask] = np.linspace(6, 3, len(y[mask])) * y[mask]
+#y[mask] = currentValues * y[mask]
 
 X = np.vstack([x, np.ones(len(x))])
 tf.compat.v1.disable_v2_behavior()
@@ -235,6 +300,9 @@ b_l1 = np.asarray(b_l1)
 print('xopt', xopt)
 
 print('m b l1', m_l1, b_l1)
+
+
+
 
 plt.plot(x, y, 'ok', markersize=3., alpha=.5)
 #plt.plot(x[mask], y[mask], 'o', markersize=3., color='red', alpha=.5, label='Outliers')
