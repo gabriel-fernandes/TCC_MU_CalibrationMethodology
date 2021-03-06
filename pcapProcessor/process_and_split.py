@@ -16,24 +16,35 @@ for idx, packet in enumerate(cap):
 
 print ('no of packets:', nopackets)
 
-channels = [[0] * 9 for i in range(nopackets)]
+channels = [[0] * 9 for i in range(8*nopackets + 1)]
+vallistStr = numpy.empty(8, dtype=object)
+values_splitted = numpy.empty(64, dtype=object)
+valueTemp = numpy.empty(8, dtype=int)
+
+majorIndex = 0
 
 #for idx in range(nopackets-1):
 for idx in range(nopackets):
-    vallist = list(cap[idx].layers[1]._all_fields.values())
-    values_filtered = vallist[12]
-    values_splitted = list(values_filtered.split(':'))
-    for y in range(9):
-        if y == 0:
-            channels[idx][y] = idx
-            continue
-        valueTemp = struct.unpack('>i',bytes.fromhex(values_splitted[0 + 8*(y-1)] + values_splitted[1 + 8*(y-1)] + values_splitted[2 + 8*(y-1)] + values_splitted[3 + 8*(y-1)]))
-        channels[idx][y] = valueTemp[0] 
+    vallist = list(cap[idx].sv.seqData.all_fields)
+
+    for k in range(len(vallist)):
+        vallistStr[k] = str(vallist[k])
+        vallist[k] = vallistStr[k].replace("<LayerField sv.seqData: ","") 
+        values_splitted = list(vallist[k].split(':'))
+
+        for y in range(9):
+            if y == 0:
+                channels[majorIndex][y] = majorIndex
+                majorIndex += 1
+                continue
+            valueTemp = struct.unpack('>i',bytes.fromhex(values_splitted[0 + 8*(y-1)] + values_splitted[1 + 8*(y-1)] + values_splitted[2 + 8*(y-1)] + values_splitted[3 + 8*(y-1)]))
+            channels[majorIndex-1][y] = valueTemp[0]
+
 
 headers = ["offset", "IA", "IB", "IC", "IN", "VA", "VB", "VC", "VN"]
 
 
-with open('template.csv', 'w', newline='') as file:
+with open('92_005.csv', 'w', newline='') as file:
     writer = csv.writer(file)
     writer.writerow(headers)
-    writer.writerows(channels[:nopackets])
+    writer.writerows(channels[:nopackets*8])
