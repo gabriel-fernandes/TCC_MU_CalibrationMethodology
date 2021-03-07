@@ -21,9 +21,6 @@
 # This is an example of using the pyComtrade module to read a comtrade record.
 # The Comtrade data are in the test_data folder.
 #
-# Developed by Miguel Moreto
-# Brazil - 2013
-#
 __version__ = "$Revision$"  # SVN revision.
 __date__ = "$Date$"         # Date of the last SVN revision.
 
@@ -62,21 +59,61 @@ currentFactor = 1000
 currentValues = [50.0, 200.0, 1000.0, 1200.0, 3000.0, 4000.0]
 voltageValues = [9.2, 57.0, 92.0, 115.0, 138.0, 161.0]
 
+
+def getSignalFrequency(vector, f_s):
+    from scipy import fftpack
+
+    X = fftpack.fft(vector)
+    freqs = fftpack.fftfreq(len(IAdataphase)) * f_s
+
+    fig, ax = plt.subplots()
+
+    ax.stem(freqs, np.abs(X))
+    ax.set_xlabel('Frequency in Hertz [Hz]')
+    ax.set_ylabel('Frequency Domain (Spectrum) Magnitude')
+    ax.set_xlim(-f_s / 2, f_s / 2)
+    ax.set_ylim(-5, 10000)
+    plt.show()
+
+
 def referenceSine(refval, no_samples, f_acq, freq):
     x = np.arange(no_samples)
-    y = np.sqrt(2)*refval*np.sin(2 * np.pi * freq * x / f_acq)
+    y = np.sqrt(2)*refval*np.sin(2 * np.pi * freq * x/f_acq)
 
-    print('RMS', np.sqrt(np.mean(y**2)))
 
-    plt.plot(x, y)
-    plt.xlabel('sample(n)')
-    plt.ylabel('voltage(V)')
-    plt.show()
+#    plt.plot(x, y)
+#    plt.xlabel('sample(n)')
+#    plt.ylabel('voltage(V)')
+#    plt.show()
 
     return y
 
-def calcWorstRMS(vector, reference):
-    error = np.empty(7, dtype=float)
+def referenceCosine(refval, no_samples, f_acq, freq):
+    x = np.arange(no_samples)
+    y = np.sqrt(2)*refval*np.cos(2 * np.pi *freq* x/f_acq)
+
+    return y
+
+def calcErrorRMS(vector, reference):
+    m = 61
+    absError = np.empty(m, dtype=float)
+    tmp = 0.0
+    
+    for idx in range(len(vector)):
+        if vector[idx] > reference[idx] :
+            tmp = vector[idx] - reference[idx]
+        else:
+            tmp = reference[idx] - vector[idx]
+        absError[idx] = tmp
+ 
+    #print('errors', absError)
+    return absError
+
+
+def calcWorstRMS(vector, reference): 
+    m = 60
+    m = m+1
+    error = np.empty(m, dtype=float)
     tmp = 0.0
     
     for idx in range(len(vector)):
@@ -86,10 +123,8 @@ def calcWorstRMS(vector, reference):
             tmp = reference - vector[idx]
         error[idx] = tmp
 
-    #print('errors', error)
-
     max_index = np.argmax(error, axis=0) 
-
+    
     return vector[max_index]
 
 def calcRMSChannel(vector, channel, isCurrent):
@@ -99,19 +134,20 @@ def calcRMSChannel(vector, channel, isCurrent):
     sumRegister2 = np.empty(8, dtype=float)
     RMSRegister = np.empty(no_acq, dtype=float)
     worstRMS_vector = np.empty(no_acq, dtype=float)
+    errors_vector = np.empty(no_acq, dtype=float)
     RMSRegister2 = np.empty(8, dtype=float)
     
     i=0
     
-    m = int((len(vector[0]) -1)/ppc)
+    m = int((len(vector[0]))/ppc)
+    m = m+1
     n = no_acq
 
     accum_matrix = [[0 for x in range(m)] for y in range(no_acq)]
     rms_matrix = [[0 for x in range(m)] for y in range(no_acq)]
 
-
     for kdx in range(no_acq):
-        for ydx in range(len(vector[kdx]) - 1):
+        for ydx in range(len(vector[kdx])):
             sumRegister[kdx] += vector[kdx][ydx]**2
             tmp  += vector[kdx][ydx]**2
             if ((ydx % (ppc-1)) == 0):
@@ -126,8 +162,7 @@ def calcRMSChannel(vector, channel, isCurrent):
     for jdx in range(no_acq):
         for ydx in range(m):
             rms_matrix[jdx][ydx] = np.sqrt(accum_matrix[jdx][ydx]/(ppc))
-    
-
+     
     #RMS per cycle (256 ppc)
     if (isCurrent):
         for zdx in range(6):
@@ -136,14 +171,13 @@ def calcRMSChannel(vector, channel, isCurrent):
         for zdx in range(6):
             worstRMS_vector[zdx] = calcWorstRMS(rms_matrix[zdx], voltageValues[zdx]*voltageFactor)
 
-
-    print('worst rms', worstRMS_vector)
+    #print('worst rms', worstRMS_vector)
 
    # RMS for all cycles
    # for jdx in range(no_acq):
    #     for ydx in range (m):
    #         RMSRegister[jdx] = np.sqrt(sumRegister[jdx]/(len(vector[jdx]) - 1))
-
+    print('worstRMS', worstRMS_vector)
     return worstRMS_vector
 
 
@@ -203,12 +237,17 @@ for idx in range (no_acq):
 
 #creating ideal sine waves
 currentSines = np.empty(no_acq, dtype=object)
+currentCosines = np.empty(no_acq, dtype=object)
 voltageSines = np.empty(no_acq, dtype=object)
+voltageCosines = np.empty(no_acq, dtype=object)
+
+
 
 for jdx in range(no_acq):
-    currentSines[jdx] = referenceSine(currentValues[jdx], Nn[jdx], 15360, 60)
-    voltageSines[jdx] = referenceSine(voltageValues[jdx], Nn[jdx], 15360, 60)
-
+    currentSines[jdx] = referenceSine(currentValues[jdx], 256, 15360, 60)
+    currentCosines[jdx] = referenceCosine(currentValues[jdx], 256, 15360, 60)
+    voltageSines[jdx] = referenceSine(voltageValues[jdx], 256, 15360, 60)
+    voltageCosines[jdx] = referenceCosine(voltageValues[jdx], 256, 15360, 60)
 
 IAdata  = np.empty(no_acq, dtype=object)
 IBdata  = np.empty(no_acq, dtype=object)
@@ -219,21 +258,63 @@ VBdata  = np.empty(no_acq, dtype=object)
 VCdata  = np.empty(no_acq, dtype=object)
 VNdata  = np.empty(no_acq, dtype=object)
 
-#getting signals from comtrade
+#getting signals from comtrade, popping last one (maybe it's a bug)
 for idx in range(no_acq):
     IAdata[idx] = comtradeObjs[idx]['A'][0]['values']
+    IAdata[idx].pop()
     IBdata[idx] = comtradeObjs[idx]['A'][1]['values']
+    IBdata[idx].pop()
     ICdata[idx] = comtradeObjs[idx]['A'][2]['values']
+    ICdata[idx].pop()
     INdata[idx] = comtradeObjs[idx]['A'][3]['values']
+    INdata[idx].pop()
     VAdata[idx] = comtradeObjs[idx]['A'][4]['values']
+    VAdata[idx].pop()
     VBdata[idx] = comtradeObjs[idx]['A'][5]['values']
+    VBdata[idx].pop()
     VCdata[idx] = comtradeObjs[idx]['A'][6]['values']
+    VCdata[idx].pop()
     VNdata[idx] = comtradeObjs[idx]['A'][7]['values']
+    VNdata[idx].pop()
 
+
+import scipy.fftpack
+
+IAdataphase = IAdata[0][:256]
+
+IAdataphase = [IAdataphase / currentFactor for IAdataphase in IAdataphase]
+
+
+innerSin = np.inner(currentSines[0], np.array(IAdataphase))
+#innerSin = np.inner(currentSines[0], currentSines[0])
+innerCosin = np.inner(currentCosines[0], np.array(IAdataphase))
+#innerCosin = np.inner(currentCosines[0], currentCosines[0])
+print('inner sin', innerSin)
+#print('inner sin', np.inner(np.array(IAdata[0]), currentSines[0]))
+print('inner cosin', innerCosin)
+
+phaseDisplacement = np.arctan(innerSin/innerCosin)
+
+print('Phase disp in deg:', phaseDisplacement*(360/np.pi))
+
+testx = np.arange(256)
+testy = currentSines[0]
+
+plt.plot(testx, testy, 'b')
+plt.plot(testx, IAdataphase, 'r')
+plt.show()
+
+#getting frequency
+
+#print('inner sin', np.inner(np.array(IAdata[0]), currentSines[0]))
+#print('inner sin', np.dot(currentSines[0], currentCosines[0]))
+#print('inner cos', np.dot(currentCosines[0], currentSines[0]))
+#print('inner cosin', np.inner(np.array(IAdata[0]), currentCosines[0]))
 
 # Reading time vector:
 time = comtradeObj.get_timestamps()
 
+#getting worse RMS
 IAdataRMS = calcRMSChannel(IAdata, "IA", True)/currentFactor
 IBdataRMS = calcRMSChannel(IBdata, "IB", True)/currentFactor
 ICdataRMS = calcRMSChannel(ICdata, "IC", True)/currentFactor
@@ -243,6 +324,13 @@ VBdataRMS = calcRMSChannel(VBdata, "VB", False)/voltageFactor
 VCdataRMS = calcRMSChannel(VCdata, "VC", False)/voltageFactor
 VNdataRMS = calcRMSChannel(VNdata, "VN", False)/voltageFactor
 
+print('IAdataRMS', IAdataRMS[0])
+print('currentVals', currentValues[0])
+
+#getting worse RMS errors example
+IAdataRMSerrors = calcErrorRMS(IAdataRMS, currentValues)
+
+print('IAdataRMSerrors', IAdataRMSerrors)
 
 #begin algorithm evaluation
 np.random.seed(123)
@@ -300,8 +388,6 @@ b_l1 = np.asarray(b_l1)
 print('xopt', xopt)
 
 print('m b l1', m_l1, b_l1)
-
-
 
 
 plt.plot(x, y, 'ok', markersize=3., alpha=.5)
