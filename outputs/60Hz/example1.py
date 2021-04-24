@@ -37,7 +37,7 @@ import scipy.optimize
 
 rcParams["figure.dpi"] = 300
 rcParams["savefig.dpi"] = 300
-rcParams['figure.figsize'] = [7, 5]
+rcParams['figure.figsize'] = [7, 4]
 rcParams["text.usetex"] = True
 
 import tensorflow as tf
@@ -64,22 +64,23 @@ def getSignalFrequency(vector, f_s):
     from scipy import fftpack
 
     X = fftpack.fft(vector)
+    X = X/100
     freqs = fftpack.fftfreq(len(IAdataphase)) * f_s
 
     fig, ax = plt.subplots()
 
     ax.stem(freqs, np.abs(X))
-    ax.set_xlabel('Frequency in Hertz [Hz]')
-    ax.set_ylabel('Frequency Domain (Spectrum) Magnitude')
-    ax.set_xlim(-f_s / 2, f_s / 2)
-    ax.set_ylim(-5, 10000)
+    ax.set_xlabel('Frequência em Hertz [Hz]')
+    #ax.set_ylabel('Frequency Domain (Spectrum) Magnitude')
+    ax.set_ylabel('Espectro de Magnitude')
+    ax.set_xlim(-f_s/2, f_s/2)
+    ax.set_ylim(-5, 100)
     plt.show()
 
 
 def referenceSine(refval, no_samples, f_acq, freq):
     x = np.arange(no_samples)
     y = np.sqrt(2)*refval*np.sin(2 * np.pi * freq * x/f_acq)
-
 
 #    plt.plot(x, y)
 #    plt.xlabel('sample(n)')
@@ -94,46 +95,69 @@ def referenceCosine(refval, no_samples, f_acq, freq):
 
     return y
 
-def calcErrorRMS(vector, reference):
-    m = 61
-    absError = np.empty(m, dtype=float)
-    tmp = 0.0
-    
-    for idx in range(len(vector)):
-        if vector[idx] > reference[idx] :
-            tmp = vector[idx] - reference[idx]
-        else:
-            tmp = reference[idx] - vector[idx]
-        absError[idx] = tmp
- 
-    #print('errors', absError)
-    return absError
-
-
 def calcWorstRMS(vector, reference): 
-    m = 60
-    m = m+1
+    m = len(vector)
     error = np.empty(m, dtype=float)
     tmp = 0.0
     
-    for idx in range(len(vector)):
+    for idx in range(1,len(vector)):
         if vector[idx] > reference :
             tmp = vector[idx] - reference
         else:
             tmp = reference - vector[idx]
         error[idx] = tmp
 
+   # print('errors', reference, vector)
+
     max_index = np.argmax(error, axis=0) 
     
+ #   print('worst points for ref ', reference, ' : ', vector) 
+
     return vector[max_index]
 
-def calcRMSChannel(vector, channel, isCurrent):
+def calcBestRMS(vector, reference): 
+    m = len(vector)
+    error = np.empty(m, dtype=float)
+    tmp = 0.0
+    
+    for idx in range(1,len(vector)):
+        if vector[idx] > reference :
+            tmp = vector[idx] - reference
+        else:
+            tmp = reference - vector[idx]
+        error[idx] = tmp
+
+    #print('errors', reference, vector)
+#    print('worst points for ref ', reference, ' : ', vector) 
+    
+    error = np.delete(error,0)
+
+    min_index = np.argmin(error, axis=0) 
+    
+    
+    return vector[min_index]
+
+def calcAverageRMS(vector, reference): 
+    m = len(vector)
+    error = np.empty(m, dtype=float)
+    tmp = 0.0
+    
+    for idx in range(1, len(vector)):
+        tmp = tmp + vector[idx]
+    
+    tmp = tmp/(len(vector)-1)
+    #print('errors', reference, vector)
+
+    return tmp
+
+
+def calcRMSChannel(vector, channel, isCurrent, calc = 0):
     ppc = 256
     tmp = 0.0
     sumRegister = np.empty(no_acq, dtype=float)
     sumRegister2 = np.empty(8, dtype=float)
     RMSRegister = np.empty(no_acq, dtype=float)
-    worstRMS_vector = np.empty(no_acq, dtype=float)
+    outputRMS_vector = np.empty(no_acq, dtype=float)
     errors_vector = np.empty(no_acq, dtype=float)
     RMSRegister2 = np.empty(8, dtype=float)
     
@@ -158,27 +182,38 @@ def calcRMSChannel(vector, channel, isCurrent):
                 i+=1
         i = 0
    
-
     for jdx in range(no_acq):
         for ydx in range(m):
             rms_matrix[jdx][ydx] = np.sqrt(accum_matrix[jdx][ydx]/(ppc))
      
-    #RMS per cycle (256 ppc)
-    if (isCurrent):
-        for zdx in range(6):
-             worstRMS_vector[zdx] = calcWorstRMS(rms_matrix[zdx], currentValues[zdx]*currentFactor)
-    else :
-        for zdx in range(6):
-            worstRMS_vector[zdx] = calcWorstRMS(rms_matrix[zdx], voltageValues[zdx]*voltageFactor)
+    if calc == 0:
+        #max error
+        #RMS per cycle (256 ppc)
+        if (isCurrent):
+            for zdx in range(6):
+                 outputRMS_vector[zdx] = calcWorstRMS(rms_matrix[zdx], currentValues[zdx]*currentFactor)
+        else:
+            for zdx in range(6):
+                outputRMS_vector[zdx] = calcWorstRMS(rms_matrix[zdx], voltageValues[zdx]*voltageFactor)
+    elif calc == 1:
+        if (isCurrent):
+            for zdx in range(6):
+                 outputRMS_vector[zdx] = calcBestRMS(rms_matrix[zdx], currentValues[zdx]*currentFactor)
+        else:
+            for zdx in range(6):
+                outputRMS_vector[zdx] = calcBestRMS(rms_matrix[zdx], voltageValues[zdx]*voltageFactor)
+    elif calc == 2:
+        #average error
+        if (isCurrent):
+            for zdx in range(6):
+                 outputRMS_vector[zdx] = calcAverageRMS(rms_matrix[zdx], currentValues[zdx]*currentFactor)
+        else:
+            for zdx in range(6):
+                outputRMS_vector[zdx] = calcAverageRMS(rms_matrix[zdx], voltageValues[zdx]*voltageFactor)
 
-    #print('worst rms', worstRMS_vector)
-
-   # RMS for all cycles
-   # for jdx in range(no_acq):
-   #     for ydx in range (m):
-   #         RMSRegister[jdx] = np.sqrt(sumRegister[jdx]/(len(vector[jdx]) - 1))
-    print('worstRMS', worstRMS_vector)
-    return worstRMS_vector
+        
+        
+    return outputRMS_vector
 
 
 # Create an instance of the ComtradeRecord class and read the CFG file:
@@ -280,7 +315,7 @@ for idx in range(no_acq):
 
 import scipy.fftpack
 
-IAdataphase = IAdata[0][:256]
+IAdataphase = IAdata[5][:256]
 
 IAdataphase = [IAdataphase / currentFactor for IAdataphase in IAdataphase]
 
@@ -300,9 +335,11 @@ print('Phase disp in deg:', phaseDisplacement*(360/np.pi))
 testx = np.arange(256)
 testy = currentSines[0]
 
-plt.plot(testx, testy, 'b')
-plt.plot(testx, IAdataphase, 'r')
-plt.show()
+#plt.plot(testx, testy, 'b')
+#plt.xlabel("Amostras")
+#plt.ylabel("Corrente (mA)")
+#plt.plot(testx, IAdataphase, 'r')
+#plt.show()
 
 #getting frequency
 
@@ -324,26 +361,145 @@ VBdataRMS = calcRMSChannel(VBdata, "VB", False)/voltageFactor
 VCdataRMS = calcRMSChannel(VCdata, "VC", False)/voltageFactor
 VNdataRMS = calcRMSChannel(VNdata, "VN", False)/voltageFactor
 
-print('IAdataRMS', IAdataRMS[0])
-print('currentVals', currentValues[0])
+#getting min error
+IAdataRMSmin = calcRMSChannel(IAdata, "IA", True, 1)/currentFactor
+IBdataRMSmin = calcRMSChannel(IBdata, "IB", True, 1)/currentFactor
+ICdataRMSmin = calcRMSChannel(ICdata, "IC", True, 1)/currentFactor
+INdataRMSmin = calcRMSChannel(INdata, "IN", True, 1)/currentFactor
+VAdataRMSmin = calcRMSChannel(VAdata, "VA", False, 1)/voltageFactor
+VBdataRMSmin = calcRMSChannel(VBdata, "VB", False, 1)/voltageFactor
+VCdataRMSmin = calcRMSChannel(VCdata, "VC", False, 1)/voltageFactor
+VNdataRMSmin = calcRMSChannel(VNdata, "VN", False, 1)/voltageFactor
+
+#gettin avg error
+IAdataRMSavg = calcRMSChannel(IAdata, "IA", True, 2)/currentFactor
+IBdataRMSavg = calcRMSChannel(IBdata, "IB", True, 2)/currentFactor
+ICdataRMSavg = calcRMSChannel(ICdata, "IC", True, 2)/currentFactor
+INdataRMSavg = calcRMSChannel(INdata, "IN", True, 2)/currentFactor
+VAdataRMSavg = calcRMSChannel(VAdata, "VA", False, 2)/voltageFactor
+VBdataRMSavg = calcRMSChannel(VBdata, "VB", False, 2)/voltageFactor
+VCdataRMSavg = calcRMSChannel(VCdata, "VC", False, 2)/voltageFactor
+VNdataRMSavg = calcRMSChannel(VNdata, "VN", False, 2)/voltageFactor
+
+
+#getSignalFrequency(IAdataphase, 15360)
+
+#print('IAdataRMS', IAdataRMS[0])
+#print('currentVals', currentValues[0])
 
 #getting worse RMS errors example
-IAdataRMSerrors = calcErrorRMS(IAdataRMS, currentValues)
+#IAdataRMSerrors = calcErrorRMS(IAdataRMS, currentValues)
 
-print('IAdataRMSerrors', IAdataRMSerrors)
+#print('IAdataRMS before', IAdataRMS)
 
 #begin algorithm evaluation
 np.random.seed(123)
 
 x = currentValues;
+#x = voltageValues;
+#x = [1, 2, 3, 4, 5, 6];
+#y = [2.3, 4.3, 6.3 , 8.3, 10.3, 12.3];
+
+"""
 y = [IAdataRMS[0], IAdataRMS[1], IAdataRMS[2], IAdataRMS[3], IAdataRMS[4], IAdataRMS[5]]
+print('Input sem calib max: ', y)
+
+
+y = [IBdataRMS[0], IBdataRMS[1], IBdataRMS[2], IBdataRMS[3], IBdataRMS[4], IBdataRMS[5]]
+print('Input sem calib max: ', y)
+y = [ICdataRMS[0], ICdataRMS[1], ICdataRMS[2], ICdataRMS[3], ICdataRMS[4], ICdataRMS[5]]
+print('Input sem calib max: ', y)
+y = [INdataRMS[0], INdataRMS[1], INdataRMS[2], INdataRMS[3], INdataRMS[4], INdataRMS[5]]
+print('Input sem calib: max ', y)
+
+y = [IAdataRMSmin[0], IAdataRMSmin[1], IAdataRMSmin[2], IAdataRMSmin[3], IAdataRMSmin[4], IAdataRMSmin[5]]
+print('Input sem calib: min ', y)
+
+y = [IBdataRMSmin[0], IBdataRMSmin[1], IBdataRMSmin[2], IBdataRMSmin[3], IBdataRMSmin[4], IBdataRMSmin[5]]
+print('Input sem calib: min ', y)
+y = [ICdataRMSmin[0], ICdataRMSmin[1], ICdataRMSmin[2], ICdataRMSmin[3], ICdataRMSmin[4], ICdataRMSmin[5]]
+print('Input sem calib: min ', y)
+y = [INdataRMSmin[0], INdataRMSmin[1], INdataRMSmin[2], INdataRMSmin[3], INdataRMSmin[4], INdataRMSmin[5]]
+print('Input sem calib: min ', y)
+
+
+"""
+y = [IAdataRMSavg[0], IAdataRMSavg[1], IAdataRMSavg[2], IAdataRMSavg[3], IAdataRMSavg[4], IAdataRMSavg[5]]
+print('Input sem calib: avg ', y)
+"""
+
+y = [IBdataRMSavg[0], IBdataRMSavg[1], IBdataRMSavg[2], IBdataRMSavg[3], IBdataRMSavg[4], IBdataRMSavg[5]]
+print('Input sem calib: avg ', y)
+y = [ICdataRMSavg[0], ICdataRMSavg[1], ICdataRMSavg[2], ICdataRMSavg[3], ICdataRMSavg[4], ICdataRMSavg[5]]
+print('Input sem calib: avg ', y)
+y = [INdataRMSavg[0], INdataRMSavg[1], INdataRMSavg[2], INdataRMSavg[3], INdataRMSavg[4], INdataRMSavg[5]]
+print('Input sem calib: avg ', y)
+
+y = [VAdataRMS[0], VAdataRMS[1], VAdataRMS[2], VAdataRMS[3], VAdataRMS[4], VAdataRMS[5]]
+print('Input sem calib max V: ', y)
+y = [VBdataRMS[0], VBdataRMS[1], VBdataRMS[2], VBdataRMS[3], VBdataRMS[4], VBdataRMS[5]]
+print('Input sem calib max V: ', y)
+
+y = [VCdataRMS[0], VCdataRMS[1], VCdataRMS[2], VCdataRMS[3], VCdataRMS[4], VCdataRMS[5]]
+print('Input sem calib max V: ', y)
+
+y = [VNdataRMS[0], VNdataRMS[1], VNdataRMS[2], VNdataRMS[3], VNdataRMS[4], VNdataRMS[5]]
+print('Input sem calib max V: ', y)
+
+y = [VAdataRMSmin[0], VAdataRMSmin[1], VAdataRMSmin[2], VAdataRMSmin[3], VAdataRMSmin[4], VAdataRMSmin[5]]
+print('Input sem calib: min V  ', y)
+y = [VBdataRMSmin[0], VBdataRMSmin[1], VBdataRMSmin[2], VBdataRMSmin[3], VBdataRMSmin[4], VBdataRMSmin[5]]
+print('Input sem calib: min V ', y)
+
+y = [VCdataRMSmin[0], VCdataRMSmin[1], VCdataRMSmin[2], VCdataRMSmin[3], VCdataRMSmin[4], VCdataRMSmin[5]]
+print('Input sem calib: min V ', y)
+
+y = [VNdataRMSmin[0], VNdataRMSmin[1], VNdataRMSmin[2], VNdataRMSmin[3], VNdataRMSmin[4], VNdataRMSmin[5]]
+print('Input sem calib: min V ', y)
+
+y = [VAdataRMSavg[0], VAdataRMSavg[1], VAdataRMSavg[2], VAdataRMSavg[3], VAdataRMSavg[4], VAdataRMSavg[5]]
+print('Input sem calib: avg V ', y)
+y = [VBdataRMSavg[0], VBdataRMSavg[1], VBdataRMSavg[2], VBdataRMSavg[3], VBdataRMSavg[4], VBdataRMSavg[5]]
+print('Input sem calib: avg V ', y)
+
+y = [VCdataRMSavg[0], VCdataRMSavg[1], VCdataRMSavg[2], VCdataRMSavg[3], VCdataRMSavg[4], VCdataRMSavg[5]]
+print('Input sem calib: avg V ', y)
+y = [VNdataRMSavg[0], VNdataRMSavg[1], VNdataRMSavg[2], VNdataRMSavg[3], VNdataRMSavg[4], VNdataRMSavg[5]]
+print('Input sem calib: avg V ', y)
+"""
+
+
+
+#y = [IAdataRMSavg[0], IAdataRMSavg[1], IAdataRMSavg[2], IAdataRMSavg[3], IAdataRMSavg[4], IAdataRMSavg[5]]
+
+#print('Input sem calib: ', y)
+
+
+#polyfit_res = np.polyfit(y, x, 2)
+
+
+#polyfit_res = [-0.000035862743078,1.052297536959464, -9.121411258387482] #lad ordem3 sigy1
+
+#polyfit_res = [-0.000008728139178, 0.927289675233447, 3.937766899317680] # lad ordem3 sig 1 1 1 0.5, 1 1]
+
+#polyfit_res = [-0.000035375088158, 1.049619156527673, -6.943702907552121] #lad ordem 3 sig 1 1 1 0.5 0.5 1
+
+#print('polyfit_res', polyfit_res)
+
+#y_polyfit = [(polyfit_res[0]*IAdataRMS[0]**2) + IAdataRMS[0]*polyfit_res[1] + polyfit_res[2], polyfit_res[0]*IAdataRMS[1]**2 + polyfit_res[1]*IAdataRMS[1] + polyfit_res[2], polyfit_res[0]*IAdataRMS[2]**2 + polyfit_res[1]*IAdataRMS[2] + polyfit_res[2],  polyfit_res[0]*IAdataRMS[3]**2 + polyfit_res[1]*IAdataRMS[3] + polyfit_res[2],  polyfit_res[0]*IAdataRMS[4]**2 + polyfit_res[1]*IAdataRMS[4] + polyfit_res[2],  polyfit_res[0]*IAdataRMS[5]**2 + polyfit_res[1]*IAdataRMS[5] + polyfit_res[2]]
+
+
+#print('polyfit:', y_polyfit)
+
 
 #noise = 10 * np.random.normal(size=len(x))
 #y = 10 * x + 10 + noise
 
-mask = np.arange(1, len(x)+1, 1) % 5 == 0
+#mask = np.arange(1, len(x)+1, 1) % 1.5 == 0
+#print('mask ex', mask)
+
 #y[mask] = np.linspace(6, 3, len(y[mask])) * y[mask]
-#y[mask] = currentValues * y[mask]
+#y[mask] = x*y[mask]
 
 X = np.vstack([x, np.ones(len(x))])
 tf.compat.v1.disable_v2_behavior()
@@ -357,6 +513,66 @@ with tf.compat.v1.Session() as sess:
 
 #Coefficients from Minimum squares (without weighting)
 p = [m[0], b[0]]
+
+print('p', p)
+
+#Correcting original wave
+
+
+#IAdataNew  = np.empty(no_acq, dtype=object)
+
+#for idx in range(no_acq):
+#    IAdataNew[idx] = comtradeObjs[idx]['A'][0]['values']
+#    IAdataNew[idx].pop()
+    #IBdata[idx] = comtradeObjs[idx]['A'][1]['values']
+    #IBdata[idx].pop()
+    #ICdata[idx] = comtradeObjs[idx]['A'][2]['values']
+    #ICdata[idx].pop()
+    #INdata[idx] = comtradeObjs[idx]['A'][3]['values']
+    #INdata[idx].pop()
+    #VAdata[idx] = comtradeObjs[idx]['A'][4]['values']
+    #VAdata[idx].pop()
+    #VBdata[idx] = comtradeObjs[idx]['A'][5]['values']
+    #VBdata[idx].pop()
+    #VCdata[idx] = comtradeObjs[idx]['A'][6]['values']
+    #VCdata[idx].pop()
+    #VNdata[idx] = comtradeObjs[idx]['A'][7]['values']
+    #VNdata[idx].pop()
+
+
+#for kdx in range(len(IAdataNew[0])):
+#    for jdx in range(no_acq):
+#        IAdataNew[jdx][kdx] = (IAdataNew[jdx][kdx])/p[0] + np.abs(p[1])
+
+#IAdataRMS = calcRMSChannel(IAdataNew, "IA", True)/currentFactor
+
+
+#z = [IAdataRMS[0]/p[0] + p[1], IAdataRMS[1]/p[0] + p[1],IAdataRMS[2]/p[0] + p[1], IAdataRMS[3]/p[0] + p[1], IAdataRMS[4]/p[0] + p[1], IAdataRMS[5]/p[0] + p[1]]
+#z = [IAdataRMSmin[0]/p[0] + p[1], IAdataRMSmin[1]/p[0] + p[1],IAdataRMSmin[2]/p[0] + p[1], IAdataRMSmin[3]/p[0] + p[1], IAdataRMSmin[4]/p[0] + p[1], IAdataRMSmin[5]/p[0] + p[1]]
+z = [IAdataRMSavg[0]/p[0] + p[1], IAdataRMSavg[1]/p[0] + p[1],IAdataRMSavg[2]/p[0] + p[1], IAdataRMSavg[3]/p[0] + p[1], IAdataRMSavg[4]/p[0] + p[1], IAdataRMSavg[5]/p[0] + p[1]]
+#z = [IBdataRMSavg[0]/p[0] + p[1], IBdataRMSavg[1]/p[0] + p[1],IBdataRMSavg[2]/p[0] + p[1], IBdataRMSavg[3]/p[0] + p[1], IBdataRMSavg[4]/p[0] + p[1], IBdataRMSavg[5]/p[0] + p[1]]
+#z = [VCdataRMS[0]/p[0] + p[1], VCdataRMS[1]/p[0] + p[1],VCdataRMS[2]/p[0] + p[1], VCdataRMS[3]/p[0] + p[1], VCdataRMS[4]/p[0] + p[1], VCdataRMS[5]/p[0] + p[1]]
+#z = [VCdataRMSmin[0]/p[0] + p[1], VCdataRMSmin[1]/p[0] + p[1],VCdataRMSmin[2]/p[0] + p[1], VCdataRMSmin[3]/p[0] + p[1], VCdataRMSmin[4]/p[0] + p[1], VCdataRMSmin[5]/p[0] + p[1]]
+#z = [VCdataRMSavg[0]/p[0] + p[1], VCdataRMSavg[1]/p[0] + p[1],VCdataRMSavg[2]/p[0] + p[1], VCdataRMSavg[3]/p[0] + p[1], VCdataRMSavg[4]/p[0] + p[1], VCdataRMSavg[5]/p[0] + p[1]]
+
+
+print('Aplicando ganhos e offsets: Minimos quadrados ord', z)
+
+#print('new IAdataRMS', IAdataRMS)
+
+#currentSinesN = np.empty(no_acq, dtype=object)
+#IAdataphaseNew = IAdataRMS[0][:256]
+
+#for jdx in range(no_acq):
+#    currentSinesN[jdx] = referenceSine(currentValues[jdx]*1000, 256, 15360, 60)
+ 
+#testx = np.arange(256)
+#testy = currentSinesN[0]
+
+#plt.plot(testx, testy, 'y')
+#plt.plot(testx, IAdataphaseNew, 'r')
+#plt.show()
+
 
 print('p ', p)
 
@@ -389,6 +605,17 @@ print('xopt', xopt)
 
 print('m b l1', m_l1, b_l1)
 
+#zN = [IAdataRMS[0]/m_l1 + b_l1, IAdataRMS[1]/m_l1 + b_l1, IAdataRMS[2]/m_l1 + b_l1, IAdataRMS[3]/m_l1 + b_l1, IAdataRMS[4]/m_l1 + b_l1, IAdataRMS[5]/m_l1 + b_l1]
+#zN = [IAdataRMSmin[0]/m_l1 + b_l1, IAdataRMSmin[1]/m_l1 + b_l1,IAdataRMSmin[2]/m_l1 + b_l1, IAdataRMSmin[3]/m_l1 + b_l1, IAdataRMSmin[4]/m_l1 + b_l1, IAdataRMSmin[5]/m_l1 + b_l1]
+zN = [IAdataRMSavg[0]/m_l1 + b_l1, IAdataRMSavg[1]/m_l1 + b_l1,IAdataRMSavg[2]/m_l1 + b_l1, IAdataRMSavg[3]/m_l1 + b_l1, IAdataRMSavg[4]/m_l1 + b_l1, IAdataRMSavg[5]/m_l1 + b_l1]
+#zN = [IBdataRMSavg[0]/m_l1 + b_l1, IBdataRMSavg[1]/m_l1 + b_l1,IBdataRMSavg[2]/m_l1 + b_l1, IBdataRMSavg[3]/m_l1 + b_l1, IBdataRMSavg[4]/m_l1 + b_l1, IBdataRMSavg[5]/m_l1 + b_l1]
+
+#zN = [VCdataRMS[0]/m_l1 + b_l1, VCdataRMS[1]/m_l1 + b_l1, VCdataRMS[2]/m_l1 + b_l1, VCdataRMS[3]/m_l1 + b_l1, VCdataRMS[4]/m_l1 + b_l1, VCdataRMS[5]/m_l1 + b_l1]
+#zN = [VCdataRMSmin[0]/m_l1 + b_l1, VCdataRMSmin[1]/m_l1 + b_l1,VCdataRMSmin[2]/m_l1 + b_l1, VCdataRMSmin[3]/m_l1 + b_l1, VCdataRMSmin[4]/m_l1 + b_l1, VCdataRMSmin[5]/m_l1 + b_l1]
+#zN = [VCdataRMSavg[0]/m_l1 + b_l1, VCdataRMSavg[1]/m_l1 + b_l1,VCdataRMSavg[2]/m_l1 + b_l1, VCdataRMSavg[3]/m_l1 + b_l1, VCdataRMSavg[4]/m_l1 + b_l1, VCdataRMSavg[5]/m_l1 + b_l1]
+
+
+print('Aplicando ganhos e offsets LAD', zN)
 
 plt.plot(x, y, 'ok', markersize=3., alpha=.5)
 #plt.plot(x[mask], y[mask], 'o', markersize=3., color='red', alpha=.5, label='Outliers')
